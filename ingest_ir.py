@@ -20,8 +20,6 @@ def ingest_file(filepath, material=None, drop_columns=None, drop_rows=None, read
     else:
         return "Current supported filetypes are: '.csv', '.tsv', '.txt', and '.xlsx'"
     
-    print(spectrum_df.columns)
-
     # Drop extraneous rows or columns 
     if drop_columns is not None:
         spectrum_df = spectrum_df.drop(columns=drop_columns) # Since we excluded headers, column names are integers so drop_columns should be a list or range of integers
@@ -29,6 +27,10 @@ def ingest_file(filepath, material=None, drop_columns=None, drop_rows=None, read
         spectrum_df = spectrum_df.drop(index=drop_rows) 
     else:
         pass
+
+    # Reset column names and index
+    spectrum_df.columns = list(range(len(spectrum_df.columns)))
+    spectrum_df.index = list(range(len(spectrum_df.index)))
 
     # Transpose data if necessary - after transposition material labels should be row zero and wavenumbers should be column zero.
     if reading_format == 'horizontal':
@@ -50,8 +52,7 @@ def ingest_file(filepath, material=None, drop_columns=None, drop_rows=None, read
 
     elif num_spectra > 1 & isinstance(num_spectra, int):
         if material == None:
-            material_label = spectrum_df.drop(columns=0).iloc[0]
-            spectrum_df = spectrum_df.drop(index=0)
+            material_label = [spectrum_df.iloc[0]][1:]
         elif isinstance(material, list):
             material_label = material
         else:
@@ -62,7 +63,7 @@ def ingest_file(filepath, material=None, drop_columns=None, drop_rows=None, read
         raise Exception("Num_spectra must be integer greater than or equal to 1.")
 
     # Wavenumber should be zero column after dropping rows/columns and transposing if necessary. 
-    wavenumber_scaled_4k = list(pd.to_numeric(spectrum_df[0])/4000)
+    wavenumber_scaled_4k = list(list(pd.to_numeric(spectrum_df[0]), errors='coerce')[1:]/4000)
     spectrum_df = spectrum_df.drop(columns=0)
 
     # sanity check on wavenumbers
@@ -85,6 +86,7 @@ def ingest_file(filepath, material=None, drop_columns=None, drop_rows=None, read
     
     # Fill missing values
     spectrum_df = spectrum_df.fillna(0)
+    # Reset columns again
     spectrum_df.columns = list(range(len(spectrum_df.columns)))
 
     # Scale down from %T or %A to just T or A
