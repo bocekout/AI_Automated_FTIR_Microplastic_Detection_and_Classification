@@ -19,6 +19,8 @@ def ingest_file(filepath, material=None, drop_columns=None, drop_rows=None, read
         print(".xlsx file detected - please note that only the first sheet will be ingested.")
     else:
         return "Current supported filetypes are: '.csv', '.tsv', '.txt', and '.xlsx'"
+    
+    print(spectrum_df.columns)
 
     # Drop extraneous rows or columns 
     if drop_columns is not None:
@@ -40,9 +42,9 @@ def ingest_file(filepath, material=None, drop_columns=None, drop_rows=None, read
     # Check if single or multiple spectra to get or set material_label accordingly
     if num_spectra == 1:
         if material == None:
-            material_label = os.path.basename(filepath)
+            material_label = [os.path.basename(filepath)]
         elif isinstance(material, str):
-            material_label=material
+            material_label=[material]
         else:
             raise Exception("For single spectrum, material should either be None or a string label. File name is used by default.")
 
@@ -73,7 +75,7 @@ def ingest_file(filepath, material=None, drop_columns=None, drop_rows=None, read
 
     # Now that wavenumber list is known we can build our pad to make sure the tuple lists are always 4000 long.
     padding_length = 4000 - len(wavenumber_scaled_4k)
-    padding = list(zip(np.zeros(padding_length), np.zeros(padding_length)))
+    padding = [tuple([0,0]) for i in range(padding_length)]
     print(f"Number readings: {len(wavenumber_scaled_4k)}")
     print(f"Padding length: {len(padding)}")
 
@@ -86,7 +88,7 @@ def ingest_file(filepath, material=None, drop_columns=None, drop_rows=None, read
     spectrum_df.columns = list(range(len(spectrum_df.columns)))
 
     # Scale down from %T or %A to just T or A
-    if any(spectrum_df > 2):
+    if np.max(spectrum_df) > 2:
         spectrum_df = spectrum_df/100 
         print('Percentage detected and converted')
     else:
@@ -101,15 +103,16 @@ def ingest_file(filepath, material=None, drop_columns=None, drop_rows=None, read
 
     # Build the output array - labels + padded lists of tuples
     first=list(spectrum_df[0])
-    first_zipped = [zip(wavenumber_scaled_4k, first)]
-    first_zipped_padded= np.hstack([first_zipped, padding])
+    first_zipped = list(zip(wavenumber_scaled_4k, first))
+    print(first_zipped)
+    first_zipped_padded = first_zipped + padding
     print(f"Padded spectral length: {len(first_zipped_padded)}")
     print(f"Readings: {len(wavenumber_scaled_4k)}, datapoints: {len(first)}")
-    output = np.array([material_label[0],first_zipped_padded])
+    output = [material_label[0],first_zipped_padded]
 
     i = 1
     while i < len(spectrum_df.columns):
-        spectrum = [[zip(wavenumber_scaled_4k, spectrum_df[i])] + padding]
+        spectrum = list(zip(wavenumber_scaled_4k, list(spectrum_df[i]))) + padding
         spec = [material_label[i],spectrum]
         output = np.vstack([output, spec])
         i += 1  
