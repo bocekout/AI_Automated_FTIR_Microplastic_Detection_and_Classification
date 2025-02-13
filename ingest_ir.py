@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import glob
 import os
+import LoadSPA
 
 def ingest_file(filepath, material=None, drop_columns=None, drop_rows=None, reading_format='vertical', num_spectra=1):
     
@@ -12,11 +13,14 @@ def ingest_file(filepath, material=None, drop_columns=None, drop_rows=None, read
 
     # Read in the file
     if file_type in ['.csv','.tsv','.txt']:
-        spectrum_df = pd.read_csv(filepath, header=None, skip_blank_lines=True)
+        spectrum_df = pd.read_csv(filepath, header=None, skip_blank_lines=True, low_memory=False)
         print(".csv, .tsv, or .txt file detected")
     elif file_type == '.xlsx':
-        spectrum_df = pd.read_excel(filepath, header=None, skip_blank_lines=True)
+        spectrum_df = pd.read_excel(filepath, header=None, skip_blank_lines=True, low_memory=False)
         print(".xlsx file detected - please note that only the first sheet will be ingested.")
+    elif file_type == '.spa':
+        spectra, wavenum, titles = LoadSPA.read_spa(filepath) # LoadSpa outputs already segmented to wavenumbers, spectra, and titles
+        print(".spa file detected")
     else:
         return "Current supported filetypes are: '.csv', '.tsv', '.txt', and '.xlsx'"
     
@@ -52,7 +56,8 @@ def ingest_file(filepath, material=None, drop_columns=None, drop_rows=None, read
 
     elif num_spectra > 1 & isinstance(num_spectra, int):
         if material == None:
-            material_label = [spectrum_df.iloc[0]][1:]
+            material_label = list(spectrum_df.iloc[0])[1:]
+            spectrum_df = spectrum_df.drop(index=0)
         elif isinstance(material, list):
             material_label = material
         else:
@@ -61,9 +66,11 @@ def ingest_file(filepath, material=None, drop_columns=None, drop_rows=None, read
     
     else:
         raise Exception("Num_spectra must be integer greater than or equal to 1.")
+    
+    print(f'Num_spectra: {num_spectra}. Num material labels: {len(material_label)}')
 
     # Wavenumber should be zero column after dropping rows/columns and transposing if necessary. 
-    wavenumber_scaled_4k = list(list(pd.to_numeric(spectrum_df[0]), errors='coerce')[1:]/4000)
+    wavenumber_scaled_4k = pd.to_numeric(list(spectrum_df[0]), errors='coerce')/4000
     spectrum_df = spectrum_df.drop(columns=0)
 
     # sanity check on wavenumbers
@@ -87,7 +94,7 @@ def ingest_file(filepath, material=None, drop_columns=None, drop_rows=None, read
     # Fill missing values
     spectrum_df = spectrum_df.fillna(0)
     # Reset columns again
-    spectrum_df.columns = list(range(len(spectrum_df.columns)))
+    spectrum_df.columns = list(range(len(list(spectrum_df.columns))))
 
     # Scale down from %T or %A to just T or A
     if np.max(spectrum_df) > 2:
@@ -104,19 +111,11 @@ def ingest_file(filepath, material=None, drop_columns=None, drop_rows=None, read
         print('Absorbance detected, no conversion needed')
 
     # Build the output array - labels + padded lists of tuples
-    first=list(spectrum_df[0])
-    first_zipped = list(zip(wavenumber_scaled_4k, first))
-    print(first_zipped)
-    first_zipped_padded = first_zipped + padding
-    print(f"Padded spectral length: {len(first_zipped_padded)}")
-    print(f"Readings: {len(wavenumber_scaled_4k)}, datapoints: {len(first)}")
-    output = [material_label[0],first_zipped_padded]
-
+    output = list(zip(wavenumber_scaled_4k, list(spectrum_df[0]))) + padding
     i = 1
-    while i < len(spectrum_df.columns):
+    while i < num_spectra:
         spectrum = list(zip(wavenumber_scaled_4k, list(spectrum_df[i]))) + padding
-        spec = [material_label[i],spectrum]
-        output = np.vstack([output, spec])
+        output = np.vstack([output, spectrum])
         i += 1  
 
     return output
@@ -144,4 +143,4 @@ def ingest_folder(folderpath, reading_format='vertical', num_spectra=1, drop_col
     
     else:
         raise Exception("""Parameter 'material' should either be list with length matching number of files in folder or none. 
-                        If num_spectra > 1, material list should contain lists matching num_spectra, otherwise a list of strings is appropriate.""")
+                        If num_spectra > 1, material list should contain lists with length of num_spectra, otherwise a list of strings is appropriate.""")
